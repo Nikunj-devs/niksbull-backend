@@ -349,9 +349,9 @@ export const createClient = async (req, res) => {
                 createdAt: istDate,
             }], { session });
 
-            // Update client with investment reference
+            // Update client with investment reference and totalInvestment
             newClient[0].investments.push(newInvestment[0]._id);
-            
+            newClient[0].totalInvestment = (newClient[0].totalInvestment || 0) + amount;
             await newClient[0].save({ session });
 
             // Update admin total funds
@@ -670,6 +670,7 @@ export const addClientFund = async (req, res) => {
         })
 
         client.investments.push(investment._id);
+        client.totalInvestment = (client.totalInvestment || 0) + amount;
         admin.totalFunds += amount;
         await admin.save();
         await client.save();
@@ -880,7 +881,6 @@ export const deleteClient = async (req, res) => {
     try {
 
         const { clientId } = req.params;
-        console.log(clientId);
 
         if (!clientId) {
             return res.status(400).json({

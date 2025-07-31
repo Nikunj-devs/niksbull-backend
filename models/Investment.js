@@ -72,14 +72,61 @@ investmentSchema.pre('validate', function (next) {
 });
 
 investmentSchema.post('save', async function () {
-    const clientId = this.client;
-    const result = await mongoose.model('Investment').aggregate([
-        { $match: { client: clientId } },
-        { $group: { _id: null, totalAmount: { $sum: "$amount" } } }
-    ])
+    try {
+        const clientId = this.client;
+        const result = await mongoose.model('Investment').aggregate([
+            { $match: { client: clientId } },
+            { $group: { _id: null, totalAmount: { $sum: "$amount" } } }
+        ])
 
-    const total = result.length > 0 ? result[0].totalAmount : 0;
-    await mongoose.model('Client').findByIdAndUpdate(clientId, { totalInvestment: total, updatedAt: new Date() });
+        const total = result.length > 0 ? result[0].totalAmount : 0;
+        await mongoose.model('Client').findByIdAndUpdate(clientId, {
+            totalInvestment: total,
+            updatedAt: new Date()
+        });
+    } catch (error) {
+        console.error('Error updating client totalInvestment in post-save hook:', error);
+    }
+})
+
+investmentSchema.post('findOneAndDelete', async function () {
+    try {
+        const clientId = this.client;
+        if (clientId) {
+            const result = await mongoose.model('Investment').aggregate([
+                { $match: { client: clientId } },
+                { $group: { _id: null, totalAmount: { $sum: "$amount" } } }
+            ])
+
+            const total = result.length > 0 ? result[0].totalAmount : 0;
+            await mongoose.model('Client').findByIdAndUpdate(clientId, {
+                totalInvestment: total,
+                updatedAt: new Date()
+            });
+        }
+    } catch (error) {
+        console.error('Error updating client totalInvestment in post-delete hook:', error);
+    }
+})
+
+investmentSchema.post('findByIdAndDelete', async function () {
+    try {
+        const clientId = this.client;
+        if (clientId) {
+            const result = await mongoose.model('Investment').aggregate([
+                { $match: { client: clientId } },
+                { $group: { _id: null, totalAmount: { $sum: "$amount" } } }
+            ])
+
+            const total = result.length > 0 ? result[0].totalAmount : 0;
+            await mongoose.model('Client').findByIdAndUpdate(clientId, {
+                totalInvestment: total,
+                updatedAt: new Date()
+            });
+        }
+    } catch (error) {
+        console.error('Error updating client totalInvestment in post-delete hook:', error);
+    }
 })
 
 export default mongoose.model('Investment', investmentSchema);
