@@ -13,7 +13,6 @@ export const createAdmin = async (req, res) => {
 
     try {
 
-        console.log(req.body);
         const { email, password, name, phone } = req.body;
 
         if (!email || !password || !name || !phone) {
@@ -175,96 +174,258 @@ export const updateAdminProfile = async (req, res) => {
 
 }
 
+// export const createClient = async (req, res) => {
+
+//     try {
+
+//         const { email, password, name, phone, bankName, accountNumber, ifscCode, bankBranch, amount, date, lockDate, refNo } = req.body;
+
+//         const istDate = DateTime.fromISO(date, { zone: 'Asia/Kolkata' }).startOf('day').toISO()
+//         const lock = DateTime.fromISO(lockDate, { zone: 'Asia/Kolkata' }).startOf('day').toISO()
+
+//         if (!email || !password || !name || !phone || !bankName || !accountNumber || !ifscCode || !bankBranch || !amount || !refNo) {
+//             return res.status(409).json({
+//                 success: false,
+//                 message: "All fields are required"
+//             });
+//         }
+
+//         const ifClientExsists = await Client.findOne({ email });
+
+//         if (ifClientExsists) {
+//             return res.status(409).json({
+//                 success: false,
+//                 message: "Client already exists with this email"
+//             })
+//         }
+
+//         const newBankDetails = await BankDetails.create({
+//             bankName: bankName,
+//             accountNumber: accountNumber,
+//             bankBranch: bankBranch,
+//             ifscCode: ifscCode,
+//         })
+
+//         const newClient = await Client.create({
+//             email: email,
+//             password: password,
+//             name: name,
+//             phone: phone,
+//             role: 'client',
+//             bankDetails: newBankDetails._id,
+//             createdAt: istDate,
+//         })
+
+//         const amountInvested = await Investment.create({
+//             client: newClient._id,
+//             amount: amount,
+//             lockInStartDate: istDate,
+//             lockInEndDate: lock,
+//             createdAt: istDate,
+//             updatedAt: istDate,
+//         })
+
+//         newClient.investments.push(amountInvested._id);
+//         await newClient.save();
+
+
+//         const adminProfile = await Admin.findById(req.user.id);
+//         adminProfile.totalFunds = adminProfile.totalFunds + amount;
+//         await adminProfile.save();
+
+//         const payout = await Payout.create({
+//             client: newClient._id,
+//             amount: amount,
+//             reference: refNo,
+//             payoutType: "credit",
+//             clientPayoutType: "credit",
+//             payoutDate: istDate,
+//         })
+
+//         const clientDetails = await Client.findById(newClient._id)
+//             .populate('bankDetails')
+//             .populate('investments')
+//             .select('-password -token -__v -createdAt -updatedAt -_id -totalInvestment -totalWithdrawn -totalInterest -totalBalance -transactionRequests -statements');
+
+
+//         return res.status(201).json({
+//             success: true,
+//             message: "Client created successfully",
+//             data: clientDetails
+//         });
+
+//     } catch (error) {
+
+//         return res.status(500).json({
+//             success: false,
+//             message: "Internal server error",
+//             error: error.message
+//         });
+
+//     }
+// }
+
 export const createClient = async (req, res) => {
 
     try {
 
         const { email, password, name, phone, bankName, accountNumber, ifscCode, bankBranch, amount, date, lockDate, refNo } = req.body;
-
-        const istDate = DateTime.fromISO(date, { zone: 'Asia/Kolkata' }).startOf('day').toISO()
-        const lock = DateTime.fromISO(lockDate, { zone: 'Asia/Kolkata' }).startOf('day').toISO()
+        // const istDate = DateTime.fromISO(date, { zone: 'Asia/Kolkata' }).startOf('day').toISO()
+        // const lock = DateTime.fromISO(lockDate, { zone: 'Asia/Kolkata' }).startOf('day').toISO()
 
         if (!email || !password || !name || !phone || !bankName || !accountNumber || !ifscCode || !bankBranch || !amount || !refNo) {
-            return res.status(409).json({
+            return res.status(400).json({
                 success: false,
                 message: "All fields are required"
             });
         }
 
-        const ifClientExsists = await Client.findOne({ email });
+        // Validate amount
+        if (amount <= 0) {
+            return res.status(400).json({
+                success: false,
+                message: "Investment amount must be greater than 0"
+            });
+        }
 
-        if (ifClientExsists) {
+        // Check if client already exists
+        const existingClient = await Client.findOne({ email }).select('_id');
+        if (existingClient) {
             return res.status(409).json({
                 success: false,
                 message: "Client already exists with this email"
-            })
+            });
         }
 
-        const newBankDetails = await BankDetails.create({
-            bankName: bankName,
-            accountNumber: accountNumber,
-            bankBranch: bankBranch,
-            ifscCode: ifscCode,
-        })
+        // Check if account number already exists
+        const existingBankDetails = await BankDetails.findOne({ accountNumber }).select('_id');
+        if (existingBankDetails) {
+            return res.status(409).json({
+                success: false,
+                message: "Bank account number already exists"
+            });
+        }
 
-        const newClient = await Client.create({
-            email: email,
-            password: password,
-            name: name,
-            phone: phone,
-            role: 'client',
-            bankDetails: newBankDetails._id,
-            createdAt: istDate,
-        })
+        // Parse dates with proper timezone handling
+        const istDate = date ? DateTime.fromISO(date, { zone: 'Asia/Kolkata' }).startOf('day').toISO() : new Date();
+        const lockEndDate = lockDate ? DateTime.fromISO(lockDate, { zone: 'Asia/Kolkata' }).startOf('day').toISO() : null;
 
-        const amountInvested = await Investment.create({
-            client: newClient._id,
-            amount: amount,
-            lockInStartDate: istDate,
-            lockInEndDate: lock,
-            createdAt: istDate,
-            updatedAt: istDate,
-        })
+        // Use database transaction for data consistency
+        const session = await mongoose.startSession();
+        session.startTransaction();
 
-        newClient.investments.push(amountInvested._id);
-        await newClient.save();
+        try {
+            // Create bank details
+            const newBankDetails = await BankDetails.create([{
+                bankName: bankName.trim(),
+                accountNumber: accountNumber.trim(),
+                bankBranch: bankBranch.trim(),
+                ifscCode: ifscCode.trim().toUpperCase(),
+                accountHolderName: name.trim(),
+                accountType: 'savings',
+                isActive: true
+            }], { session });
 
+            // Create client
+            const newClient = await Client.create([{
+                email: email.toLowerCase().trim(),
+                password: password,
+                name: name.trim(),
+                phone: phone.trim(),
+                role: 'client',
+                bankDetails: newBankDetails[0]._id,
+                status: 'active',
+                createdAt: istDate,
+            }], { session });
 
-        const adminProfile = await Admin.findById(req.user.id);
-        adminProfile.totalFunds = adminProfile.totalFunds + amount;
-        await adminProfile.save();
+            // Create investment
+            const newInvestment = await Investment.create([{
+                client: newClient[0]._id,
+                amount: amount,
+                lockInStartDate: istDate,
+                lockInEndDate: lockEndDate,
+                status: 'locked',
+                createdAt: istDate,
+            }], { session });
 
-        const payout = await Payout.create({
-            client: newClient._id,
-            amount: amount,
-            reference: refNo,
-            payoutType: "credit",
-            clientPayoutType: "credit",
-            payoutDate: istDate,
-        })
+            // Update client with investment reference
+            newClient[0].investments.push(newInvestment[0]._id);
+            await newClient[0].save({ session });
 
-        const clientDetails = await Client.findById(newClient._id)
-            .populate('bankDetails')
-            .populate('investments')
-            .select('-password -token -__v -createdAt -updatedAt -_id -totalInvestment -totalWithdrawn -totalInterest -totalBalance -transactionRequests -statements');
+            // Update admin total funds
+            const adminProfile = await Admin.findById(req.user.id).session(session);
+            if (adminProfile) {
+                adminProfile.totalFunds = (adminProfile.totalFunds || 0) + amount;
+                await adminProfile.save({ session });
+            }
 
+            // Create payout record
+            await Payout.create([{
+                client: newClient[0]._id,
+                amount: amount,
+                reference: refNo.trim(),
+                payoutType: "credit",
+                clientPayoutType: "credit",
+                payoutDate: istDate,
 
-        return res.status(201).json({
-            success: true,
-            message: "Client created successfully",
-            data: clientDetails
-        });
+            }], { session });
+
+            // Commit transaction
+            await session.commitTransaction();
+
+            // Fetch complete client details with populated data
+            const clientDetails = await Client.findById(newClient[0]._id)
+                .populate('bankDetails')
+                .populate({
+                    path: 'investments',
+                    select: 'amount lockInStartDate lockInEndDate status isUnlocked daysRemaining'
+                })
+                .select('-password -token -__v -transactionRequests -statements');
+
+            return res.status(201).json({
+                success: true,
+                message: "Client created successfully",
+                data: clientDetails
+            });
+
+        } catch (error) {
+            // Rollback transaction on error
+            await session.abortTransaction();
+            throw error;
+        } finally {
+            // End session
+            session.endSession();
+        }
 
     } catch (error) {
+        console.error('Create Client Error:', error);
+
+        // Handle specific validation errors
+        if (error.name === 'ValidationError') {
+            const validationErrors = Object.values(error.errors).map(err => err.message);
+            return res.status(400).json({
+                success: false,
+                message: "Validation failed",
+                errors: validationErrors
+            });
+        }
+
+        // Handle duplicate key errors
+        if (error.code === 11000) {
+            const field = Object.keys(error.keyPattern)[0];
+            return res.status(409).json({
+                success: false,
+                message: `${field.charAt(0).toUpperCase() + field.slice(1)} already exists`
+            });
+        }
 
         return res.status(500).json({
             success: false,
             message: "Internal server error",
-            error: error.message
+            error: process.env.NODE_ENV === 'development' ? error.message : 'Something went wrong'
         });
-
     }
-}
+};
 
 export const getAllClients = async (req, res) => {
     try {
@@ -966,7 +1127,7 @@ export const withDrawFund = async (req, res) => {
     try {
         const { clientId, investmentId, reference } = req.body;
 
-        console.log("Pass-1");
+
         if (!clientId || !investmentId) {
             return res.status(400).json({
                 success: false,
@@ -974,7 +1135,7 @@ export const withDrawFund = async (req, res) => {
             });
         }
 
-        console.log("Pass-2");
+
         // Fetch all needed data in parallel
         const [client, investment, admin] = await Promise.all([
             Client.findById(clientId),
@@ -982,18 +1143,18 @@ export const withDrawFund = async (req, res) => {
             Admin.findById(req.user.id)
         ]);
 
-        console.log("Pass-3");
+
         // Validate data existence
         if (!client) {
             return res.status(404).json({ success: false, message: "Client not found." });
         }
 
-        console.log("Pass-4");
+
         if (!investment) {
             return res.status(404).json({ success: false, message: "Investment not found." });
         }
 
-        console.log("Pass-5");
+
         // Check investment unlock status
         if (investment.status === 'locked') {
             return res.status(400).json({
@@ -1002,13 +1163,11 @@ export const withDrawFund = async (req, res) => {
             });
         }
 
-        console.log("Pass-6");
         // Update admin funds and create payout
         admin.totalFunds -= investment.amount;
         client.totalWithdrawn += investment.amount;
         client.totalInvestment -= investment.amount;
 
-        console.log("Pass-7");
         await Payout.create({
             client: clientId,
             amount: investment.amount,
@@ -1018,7 +1177,7 @@ export const withDrawFund = async (req, res) => {
             payoutDate: new Date(),
         });
 
-        console.log("Pass-8");
+
         // Delete investment and save changes
         const [_, __] = await Promise.all([
             admin.save(),
@@ -1026,7 +1185,7 @@ export const withDrawFund = async (req, res) => {
             Investment.findByIdAndDelete(investmentId)
         ]);
 
-        console.log("Pass-9");
+
         // Fetch updated client info
         const updatedClient = await Client.findById(clientId)
             .populate('bankDetails')
@@ -1036,7 +1195,7 @@ export const withDrawFund = async (req, res) => {
             })
             .select('-password -token -__v -createdAt -updatedAt');
 
-        console.log("Pass-10");
+
         return res.status(200).json({
             success: true,
             message: "Fund withdrawn successfully.",

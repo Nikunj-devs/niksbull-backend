@@ -6,16 +6,25 @@ const investmentSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Client',
         required: true,
+        index: true, // Add index for better query performance
     },
 
     amount: {
         type: Number,
         required: true,
+        min: [0, 'Amount cannot be negative'],
+        validate: {
+            validator: function (value) {
+                return value > 0;
+            },
+            message: 'Investment amount must be greater than 0'
+        }
     },
 
     lockInStartDate: {
         type: Date,
         required: true,
+        default: Date.now,
     },
 
     lockInEndDate: {
@@ -34,12 +43,17 @@ const investmentSchema = new mongoose.Schema({
 
     status: {
         type: String,
-        enum: ['locked', 'expired', 'withdrawal_requested', 'withdrawn'],
+        enum: {
+            values: ['locked', 'expired', 'withdrawal_requested', 'withdrawn'],
+            message: 'Invalid investment status'
+        },
         default: 'locked',
+        index: true, // Add index for status queries
     },
 
     createdAt: {
         type: Date,
+        default: Date.now,
     },
 
     updatedAt: {

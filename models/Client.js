@@ -7,34 +7,55 @@ const clientSchema = new mongoose.Schema({
         required: true,
         unique: true,
         trim: true,
-        primary: true,
+        lowercase: true,
+        index: true, // Add index for email lookups
+        validate: {
+            validator: function (email) {
+                const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                return emailRegex.test(email);
+            },
+            message: 'Please provide a valid email address'
+        }
     },
 
     password: {
         type: String,
         required: true,
-        minlength: 6,
+        minlength: [6, 'Password must be at least 6 characters long'],
         trim: true,
+        select: false, // Don't include password in queries by default
     },
 
     name: {
         type: String,
         required: true,
         trim: true,
-        minlength: 2,
-        maxlength: 50,
+        minlength: [2, 'Name must be at least 2 characters long'],
+        maxlength: [50, 'Name cannot exceed 50 characters'],
+        index: true, // Add index for name searches
     },
 
     phone: {
         type: String,
         required: true,
         trim: true,
-        minlength: 10,
+        minlength: [10, 'Phone number must be at least 10 digits'],
+        maxlength: [15, 'Phone number cannot exceed 15 digits'],
+        validate: {
+            validator: function (phone) {
+                const phoneRegex = /^[0-9+\-\s()]+$/;
+                return phoneRegex.test(phone);
+            },
+            message: 'Please provide a valid phone number'
+        }
     },
 
     role: {
         type: String,
-        enum: ['admin', 'client'],
+        enum: {
+            values: ['admin', 'client'],
+            message: 'Invalid role'
+        },
         default: 'client',
         required: true,
     },
@@ -55,21 +76,25 @@ const clientSchema = new mongoose.Schema({
     totalInvestment: {
         type: Number,
         default: 0,
+        min: [0, 'Total investment cannot be negative'],
     },
 
     totalInterest: {
         type: Number,
         default: 0,
+        min: [0, 'Total interest cannot be negative'],
     },
 
     totalWithdrawn: {
         type: Number,
         default: 0,
+        min: [0, 'Total withdrawn cannot be negative'],
     },
 
     totalBalance: {
         type: Number,
         default: 0,
+        min: [0, 'Total balance cannot be negative'],
     },
 
     transactionRequests: [
@@ -93,6 +118,7 @@ const clientSchema = new mongoose.Schema({
 
     createdAt: {
         type: Date,
+        default: Date.now,
     },
 
     updatedAt: {
