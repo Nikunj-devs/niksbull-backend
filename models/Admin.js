@@ -22,8 +22,7 @@ const adminSchema = new mongoose.Schema({
         type: String,
         required: true,
         minlength: [6, 'Password must be at least 6 characters long'],
-        trim: true,
-        select: false, // Don't include password in queries by default
+        trim: true
     },
 
     name: {
