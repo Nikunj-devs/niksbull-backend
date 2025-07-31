@@ -79,6 +79,7 @@ export const loginAdmin = async (req, res) => {
             });
         }
 
+        console.log("password:", admin.password);
         const isPasswordValid = password === admin.password;
 
         if (!isPasswordValid) {
