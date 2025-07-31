@@ -351,6 +351,7 @@ export const createClient = async (req, res) => {
 
             // Update client with investment reference
             newClient[0].investments.push(newInvestment[0]._id);
+            
             await newClient[0].save({ session });
 
             // Update admin total funds
